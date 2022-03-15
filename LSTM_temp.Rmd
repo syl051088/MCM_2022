@@ -1,0 +1,88 @@
+---
+title: "MCM_2022"
+author: "MCM2022"
+date: "2/17/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(lubridate)
+
+theme_set(theme_bw())
+
+set.seed(123)
+```
+
+```{r}
+# Set colors
+DB <- rgb(29/255, 59/255, 83/255)
+B <- rgb(69/255, 147/255, 182/255)
+O <- rgb(225/255, 116/255, 56/255)
+```
+
+```{r}
+# Load the data & clean the data
+bitcoin_data <- read.csv("data/BCHAIN-MKPRU.csv") %>% 
+  mutate(Date = as.Date(Date, "%m/%d/%y")) %>% 
+  na.omit()
+
+gold_data <- read.csv("data/LBMA-GOLD.csv") %>% 
+  mutate(Date = as.Date(Date, "%m/%d/%y")) %>% 
+  na.omit()
+
+bitcoinLSTM <- read.csv("DataPrediction/Output/LSTM/bitcoin_LSTM.csv")
+bitcoinARIMA <- readRDS("DataPrediction/Output/ARIMA/bitcoin_ARIMA.RData")
+
+bitcoinLSTM <- bitcoinLSTM %>% 
+  mutate(Type = "predict-LSTM",
+         Value = value) %>% 
+  select(Date, Value, Type)
+  
+bitcoinARIMA <- bitcoin_data %>% 
+  filter(Date > "2020-09-09") %>% 
+  mutate(Value = bitcoinARIMA,
+         Type = "predict-ARIMA")
+
+bitcoin_final <- bitcoin_data %>% 
+  mutate(Type = "original-raw") %>% 
+  rbind(bitcoinLSTM) %>% 
+  rbind(bitcoinARIMA)
+```
+
+```{r}
+bitcoin_final %>% 
+  ggplot(aes(x = Date,
+             y = Value,
+             color = Type)) +
+  geom_line() +
+  scale_color_manual(values = c(O, B, DB))
+
+bitcoin_final %>%
+  filter(Date >= "2020-09-09") %>% 
+  ggplot(aes(x = Date,
+             y = Value,
+             color = Type)) +
+  geom_line() +
+  scale_color_manual(values = c(O, B, DB))
+```
+
+```{r}
+MSE_ARIMA <- bitcoin_data %>% 
+  filter(Date >= "2020-09-10") %>% 
+  mutate(Raw = Value) %>%
+  select(-Date, -Value) %>% 
+  cbind(bitcoinARIMA) %>% 
+  mutate(dif = (Raw -Value)^2) %>% 
+  summarise(MSE = sum(dif) / n()) %>% 
+  pull()
+
+MSE_ARIMA
+```
+
